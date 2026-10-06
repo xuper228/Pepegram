@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pepegram</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ══════════════ РЕЄСТРАЦІЙНИЙ ЕКРАН ══════════════ -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-icon">🐸</span>
+        <h1>Pepegram</h1>
+        <p>Найкращий чат у всьому інтернеті</p>
+      </div>
+      <div class="auth-form">
+        <label>Твій нікнейм</label>
+        <input
+          type="text"
+          id="authNickInput"
+          placeholder="Введи нікнейм..."
+          maxlength="20"
+          autocomplete="off"
+        />
+        <button id="authEnterBtn">Увійти в чат →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ ОСНОВНИЙ ЧАТ ══════════════ -->
+  <div class="app" id="app" style="display:none">
+
+    <!-- Сайдбар -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <span>🐸</span>
+        <span class="sidebar-title">Pepegram</span>
+      </div>
+
+      <div class="sidebar-section">
+        <span class="section-label">🟢 Онлайн</span>
+        <ul id="userList" class="user-list"></ul>
+      </div>
+
+      <div class="sidebar-section wallpaper-section">
+        <span class="section-label">🖼️ Шпалери</span>
+        <div class="wallpaper-options">
+          <button class="wp-btn active" data-wp="default" title="Стандартні"></button>
+          <button class="wp-btn" data-wp="gradient1" title="Захід"></button>
+          <button class="wp-btn" data-wp="gradient2" title="Океан"></button>
+          <button class="wp-btn" data-wp="gradient3" title="Ліс"></button>
+          <button class="wp-btn" data-wp="dark" title="Темні"></button>
+          <button class="wp-btn custom" data-wp="custom" title="Свій колір">
+            <input type="color" id="bgPicker" value="#dfe6f0" />
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="my-nick-display">
+          <span class="nick-avatar" id="myAvatar">?</span>
+          <span id="myNickDisplay">—</span>
+        </div>
+        <button class="change-nick-btn" id="changeNickBtn">Змінити нік</button>
+      </div>
+    </aside>
+
+    <!-- Основна частина чату -->
+    <main class="chat-main">
+
+      <!-- Хедер -->
+      <header class="chat-header">
+        <div class="header-info">
+          <button class="hamburger-btn" id="hamburgerBtn" title="Меню">☰</button>
+          <span class="header-icon">🐸</span>
+          <div>
+            <div class="header-title">Загальний чат</div>
+            <div class="header-sub" id="onlineCount">0 онлайн</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" id="muteBtn" title="Вимкнути звук">🔔</button>
+        </div>
+      </header>
+
+      <!-- Повідомлення -->
+      <div class="messages-wrap" id="messagesWrap">
+        <ul class="messages-list" id="messages"></ul>
+      </div>
+
+      <!-- Typing indicator -->
+      <div class="typing-status" id="typingStatus"></div>
+
+      <!-- Поле вводу -->
+      <div class="input-area">
+        <form id="form">
+          <button type="button" class="emoji-btn" id="emojiBtn">😄</button>
+          <button type="button" class="rephrase-btn" id="rephraseBtn" title="Перефразувати текст">✨</button>
+          <input
+            id="input"
+            autocomplete="off"
+            placeholder="Написати повідомлення..."
+            maxlength="500"
+          />
+          <button type="submit" class="send-btn" id="sendBtn">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </form>
+        <!-- Emoji picker (простий) -->
+        <div class="emoji-picker" id="emojiPicker">
+          <span>😀</span><span>😂</span><span>😍</span><span>🤔</span>
+          <span>😎</span><span>😭</span><span>🔥</span><span>👍</span>
+          <span>❤️</span><span>🎉</span><span>😅</span><span>🤣</span>
+          <span>😊</span><span>😢</span><span>😡</span><span>🤩</span>
+          <span>🙏</span><span>👏</span><span>💯</span><span>🐸</span>
+        </div>
+        <!-- Rephrase panel -->
+        <div class="rephrase-panel" id="rephrasePanel">
+          <div class="rephrase-header">
+            <span class="rephrase-title">✨ Перефразувати</span>
+            <button class="rephrase-close" id="rephrasePanelClose">✕</button>
+          </div>
+          <div class="rephrase-preview" id="rephrasePreview">
+            <span class="rephrase-preview-placeholder">Введи текст у поле і натисни стиль ↓</span>
+          </div>
+          <div class="rephrase-styles">
+            <button class="rephrase-style-btn" data-style="formal">🎩 Офіційно</button>
+            <button class="rephrase-style-btn" data-style="casual">😊 Дружньо</button>
+            <button class="rephrase-style-btn" data-style="shorter">✂️ Коротше</button>
+            <button class="rephrase-style-btn" data-style="longer">📝 Детальніше</button>
+            <button class="rephrase-style-btn" data-style="emoji">🎉 З емодзі</button>
+            <button class="rephrase-style-btn" data-style="confident">💪 Впевнено</button>
+          </div>
+          <div class="rephrase-actions" id="rephraseActions" style="display:none">
+            <button class="rephrase-apply-btn" id="rephraseApplyBtn">✅ Використати</button>
+            <button class="rephrase-retry-btn" id="rephraseRetryBtn">🔄 Ще раз</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Backdrop для мобільного сайдбару -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
