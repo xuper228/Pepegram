@@ -30,9 +30,11 @@
 
 html, body {
   height: 100%;
+  min-height: 100%;
   font-family: var(--font);
   background: var(--bg);
   color: var(--msg-in-txt);
+  overflow: hidden;
 }
 
 /* ── Auth Overlay ──────────────────────── */
@@ -45,6 +47,7 @@ html, body {
   justify-content: center;
   z-index: 1000;
   animation: fadeIn .4s ease;
+  overflow-y: auto;
 }
 
 .auth-card {
@@ -131,7 +134,8 @@ html, body {
 /* ── App Layout ───────────────────────── */
 .app {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
+  min-height: 100svh;
   overflow: hidden;
 }
 
@@ -325,6 +329,7 @@ html, body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   position: relative;
   background: var(--bg);
   transition: background .3s;
@@ -384,6 +389,7 @@ html, body {
 /* ── Messages ─────────────────────────── */
 .messages-wrap {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 20px 4px;
   scroll-behavior: smooth;
@@ -1040,4 +1046,43 @@ html, body {
 @media (max-width: 480px) {
   .rephrase-panel { left: 8px; right: 8px; }
   .rephrase-style-btn { font-size: 11px; padding: 5px 10px; }
+}
+/* Додаткові елементи кімнат та локального AI */
+.chat-rooms { margin-top: 18px; }
+.room-form { display: flex; gap: 6px; margin-top: 8px; }
+.room-form input { min-width: 0; width: 100%; }
+.room-form button, #generalRoomBtn { cursor: pointer; }
+.user-list li[title] { cursor: pointer; }
+.ai-btn { border: 0; border-radius: 8px; padding: 0 8px; cursor: pointer; }
+.ai-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.chat-rooms { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.08); }
+.chat-rooms .section-label { display: block; margin-bottom: 9px; }
+.room-form { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.room-form input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: rgba(0,0,0,.16); color: #fff; outline: none; }
+.room-form input:focus { border-color: rgba(140,160,255,.8); }
+.room-form button, #generalRoomBtn { border: 0; border-radius: 9px; padding: 8px 10px; color: #fff; background: rgba(255,255,255,.12); cursor: pointer; }
+.room-form button:hover, #generalRoomBtn:hover { background: rgba(255,255,255,.2); }
+#generalRoomBtn { width: 100%; margin-top: 8px; text-align: left; }
+.ai-room-btn { width: 100%; margin-top: 8px; padding: 9px 10px; border: 1px solid rgba(147,129,255,.35); border-radius: 9px; background: rgba(112,91,220,.18); color: #fff; text-align: left; cursor: pointer; }
+.ai-room-btn:hover, .ai-room-btn.active, #generalRoomBtn.active { background: rgba(112,91,220,.38); }
+.room-list { list-style: none; display: grid; gap: 5px; margin: 9px 0 0; padding: 0; max-height: 180px; overflow-y: auto; }
+.room-list-item { width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: rgba(255,255,255,.07); color: #eee; text-align: left; cursor: pointer; }
+.room-list-item:hover { background: rgba(105,125,255,.22); }
+.user-list li[title] { cursor: pointer; }
+.user-list li[title]:hover { background: rgba(105,125,255,.18); }
+.auth-error { min-height: 18px; color: #d64e62; font-size: 12px; text-align: left; }
+.auth-mode-btn { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 12px; }
+.logout-btn { width: 100%; margin-top: 8px; padding: 8px; border: 1px solid rgba(255,100,120,.35); border-radius: 9px; background: rgba(180,50,70,.12); color: #ffb4bf; cursor: pointer; }
+.logout-btn:hover { background: rgba(180,50,70,.25); }
+
+/* Мобільний fullscreen layout: скроляться лише повідомлення. */
+@media (max-width: 768px) {
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  .app { width: 100%; height: 100dvh; min-height: 100dvh; }
+  .chat-main { width: 100%; height: 100%; min-height: 0; }
+  .messages-wrap { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .input-area { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .input-area form { min-height: 44px; }
+  #input { min-width: 0; }
 }

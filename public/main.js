@@ -1,513 +1,313 @@
-
-let myNick    = '';
+let myNick = '';
 let soundMuted = false;
 let typingTimer;
-let isTyping   = false;
+let isTyping = false;
+let ollamaAvailable = false;
 
-// ── Аудіо контекст (Web Audio API) ────────────────────────────────
-const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let audioCtx;
-
-function ensureAudio() {
-  if (!audioCtx) audioCtx = new AudioCtx();
-}
-
-/** Програємо невеликий звук «дзінь» при відправці */
-function playSendSound() {
-  if (soundMuted) return;
-  ensureAudio();
-  const osc  = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.12);
-  gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
-  osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + 0.2);
-}
-
-/** Програємо звук «поп» при отриманні повідомлення */
-function playReceiveSound() {
-  if (soundMuted) return;
-  ensureAudio();
-  const osc  = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(660, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.08);
-  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-  osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + 0.18);
-}
-
-// ── Socket.IO ──────────────────────────────────────────────────────
 const socket = io();
-
-// ── DOM-елементи ───────────────────────────────────────────────────
-const authOverlay    = document.getElementById('authOverlay');
-const authNickInput  = document.getElementById('authNickInput');
-const authEnterBtn   = document.getElementById('authEnterBtn');
-
-const app            = document.getElementById('app');
-const form           = document.getElementById('form');
-const input          = document.getElementById('input');
-const messagesList   = document.getElementById('messages');
-const messagesWrap   = document.getElementById('messagesWrap');
-const userList       = document.getElementById('userList');
-const typingStatus   = document.getElementById('typingStatus');
-const onlineCount    = document.getElementById('onlineCount');
-const myNickDisplay  = document.getElementById('myNickDisplay');
-const myAvatar       = document.getElementById('myAvatar');
-const changeNickBtn  = document.getElementById('changeNickBtn');
-const muteBtn        = document.getElementById('muteBtn');
-const emojiBtn       = document.getElementById('emojiBtn');
-const emojiPicker    = document.getElementById('emojiPicker');
-const bgPicker       = document.getElementById('bgPicker');
-const chatMain       = document.querySelector('.chat-main');
-const hamburgerBtn   = document.getElementById('hamburgerBtn');
-const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-const sidebar        = document.querySelector('.sidebar');
-
-// ── Мобільний сайдбар (drawer) ─────────────────────────────────────
-function openSidebar() {
-  sidebar.classList.add('open');
-  sidebarBackdrop.classList.add('visible');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeSidebar() {
-  sidebar.classList.remove('open');
-  sidebarBackdrop.classList.remove('visible');
-  document.body.style.overflow = '';
-}
-
-hamburgerBtn.addEventListener('click', () => {
-  sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-});
-
-sidebarBackdrop.addEventListener('click', closeSidebar);
-
-// Закриваємо сайдбар при виборі шпалер / нікнейму на мобільному
-function closeSidebarOnMobile() {
-  if (window.innerWidth <= 768) closeSidebar();
-}
-
-
-// ── Авторизація ─────────────────────────────────────────────────────
-function enterChat(nick) {
-  myNick = nick.trim();
-  if (!myNick) return;
-
-  // Зберігаємо нік у localStorage
-  localStorage.setItem('pepegram_nick', myNick);
-
-  // Оновлюємо UI
-  myNickDisplay.textContent = myNick;
-  myAvatar.textContent      = myNick[0].toUpperCase();
-
-  // Відправляємо нік серверу
-  socket.emit('setUsername', myNick);
-
-  // Показуємо чат
-  authOverlay.style.display = 'none';
-  app.style.display         = 'flex';
-
-  // Системне повідомлення
-
-}
-
-authEnterBtn.addEventListener('click', () => {
-  enterChat(authNickInput.value);
-});
-
-authNickInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') enterChat(authNickInput.value);
-});
-
-// Відновлення ніку з localStorage
-const savedNick = localStorage.getItem('pepegram_nick');
-if (savedNick) {
-  authNickInput.value = savedNick;
-}
-
-// ── Відправка повідомлення ─────────────────────────────────────────
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-
-  socket.emit('chat message', { text, nick: myNick });
-  playSendSound();
-  input.value = '';
-
-  // Зупиняємо typing indicator
-  if (isTyping) {
-    isTyping = false;
-    socket.emit('stopTyping');
-  }
-});
-
-// ── Typing Indicator ───────────────────────────────────────────────
-input.addEventListener('input', () => {
-  if (!myNick) return;
-
-  if (!isTyping) {
-    isTyping = true;
-    socket.emit('userTyping', myNick);
-  }
-
-  clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => {
-    isTyping = false;
-    socket.emit('stopTyping');
-  }, 1800);
-});
-
-// ── Socket events ──────────────────────────────────────────────────
-
-/** Отримуємо повідомлення */
-socket.on('chat message', ({ text, nick }) => {
-  const isOwn = nick === myNick;
-  addMessage(text, nick, isOwn ? 'outgoing' : 'incoming');
-  if (!isOwn) playReceiveSound();
-});
-
-/** Список онлайн-користувачів */
-socket.on('onlineUsers', (users) => {
-  userList.innerHTML = '';
-  users.forEach(u => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <span class="u-avatar">${u[0].toUpperCase()}</span>
-      <span>${u}</span>
-      <span class="u-dot"></span>
-    `;
-    userList.appendChild(li);
-  });
-  const count = users.length;
-  onlineCount.textContent = `${count} ${pluralUsers(count)}`;
-});
-
-/** Typing indicator від інших */
-socket.on('userTyping', (nick) => {
-  if (nick === myNick) return;
-  typingStatus.textContent = `${nick} друкує...`;
-});
-
-socket.on('stopTyping', () => {
-  typingStatus.textContent = '';
-});
-
-/** Системні повідомлення з сервера */
-socket.on('system', (msg) => {
-  addSystemMessage(msg);
-});
-
-// ── Допоміжні функції ──────────────────────────────────────────────
-
-function addMessage(text, nick, direction) {
-  const li = document.createElement('li');
-  li.className = `msg-item ${direction}`;
-
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
-
-  li.innerHTML = `
-    <div class="msg-nick">${escapeHtml(nick)}</div>
-    <div class="msg-bubble">${escapeHtml(text)}</div>
-    <div class="msg-time">${timeStr}</div>
-  `;
-  messagesList.appendChild(li);
-  scrollToBottom();
-}
-
-function addSystemMessage(text) {
-  const li = document.createElement('li');
-  li.className = 'msg-item system';
-  li.innerHTML = `<div class="msg-bubble">${escapeHtml(text)}</div>`;
-  messagesList.appendChild(li);
-  scrollToBottom();
-}
-
-function scrollToBottom() {
-  messagesWrap.scrollTop = messagesWrap.scrollHeight;
-}
-
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function pluralUsers(n) {
-  if (n % 10 === 1 && n % 100 !== 11) return 'онлайн';
-  if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'онлайн';
-  return 'онлайн';
-}
-
-// ── Зміна нікнейму (модалка) ───────────────────────────────────────
-changeNickBtn.addEventListener('click', () => {
-  showNickModal();
-});
-
-function showNickModal() {
-  const overlay = document.createElement('div');
-  overlay.className = 'nick-modal-overlay';
-  overlay.innerHTML = `
-    <div class="nick-modal">
-      <h3>✏️ Змінити нікнейм</h3>
-      <input id="newNickInput" type="text" placeholder="Новий нік..." maxlength="20" value="${escapeHtml(myNick)}" />
-      <div class="nick-modal-actions">
-        <button class="btn-cancel" id="nickCancelBtn">Скасувати</button>
-        <button class="btn-save"   id="nickSaveBtn">Зберегти</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  const newNickInput = overlay.querySelector('#newNickInput');
-  newNickInput.focus();
-  newNickInput.select();
-
-  overlay.querySelector('#nickCancelBtn').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#nickSaveBtn').addEventListener('click', () => saveNewNick(overlay, newNickInput));
-  newNickInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter')  saveNewNick(overlay, newNickInput);
-    if (e.key === 'Escape') overlay.remove();
-  });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-}
-
-function saveNewNick(overlay, inp) {
-  const newNick = inp.value.trim();
-  if (!newNick || newNick === myNick) { overlay.remove(); return; }
-
-  const oldNick = myNick;
-  myNick = newNick;
-  localStorage.setItem('pepegram_nick', myNick);
-  myNickDisplay.textContent = myNick;
-  myAvatar.textContent      = myNick[0].toUpperCase();
-
-  socket.emit('setUsername', myNick);
-  addSystemMessage(`Ви змінили нік: ${oldNick} → ${myNick}`);
-  overlay.remove();
-}
-
-// ── Mute Button ─────────────────────────────────────────────────────
-muteBtn.addEventListener('click', () => {
-  soundMuted = !soundMuted;
-  muteBtn.textContent = soundMuted ? '🔕' : '🔔';
-  muteBtn.title = soundMuted ? 'Увімкнути звук' : 'Вимкнути звук';
-});
-
-// ── Emoji Picker ────────────────────────────────────────────────────
-emojiBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  emojiPicker.classList.toggle('open');
-});
-
-emojiPicker.querySelectorAll('span').forEach(span => {
-  span.addEventListener('click', () => {
-    input.value += span.textContent;
-    input.focus();
-    emojiPicker.classList.remove('open');
-  });
-});
-
-document.addEventListener('click', () => emojiPicker.classList.remove('open'));
-
-// ── Wallpaper ───────────────────────────────────────────────────────
-const wpClasses = ['wp-gradient1', 'wp-gradient2', 'wp-gradient3', 'wp-dark'];
-
-document.querySelectorAll('.wp-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    // Якщо це кнопка з color input — не перехоплюємо
-    if (btn.dataset.wp === 'custom') return;
-
-    e.stopPropagation();
-    document.querySelectorAll('.wp-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    // Знімаємо всі wp-класи
-    chatMain.classList.remove(...wpClasses, 'wp-custom');
-    chatMain.style.background = '';
-
-    if (btn.dataset.wp !== 'default') {
-      chatMain.classList.add(`wp-${btn.dataset.wp}`);
-    }
-
-    localStorage.setItem('pepegram_wp', btn.dataset.wp);
-    closeSidebarOnMobile();
-  });
-});
-
-// Кастомний колір
-bgPicker.addEventListener('input', () => {
-  chatMain.classList.remove(...wpClasses, 'wp-custom');
-  chatMain.style.background = bgPicker.value;
-
-  // Активна кнопка
-  document.querySelectorAll('.wp-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.wp-btn[data-wp="custom"]').classList.add('active');
-  localStorage.setItem('pepegram_wp', 'custom:' + bgPicker.value);
-});
-
-// Відновлення шпалер
-const savedWp = localStorage.getItem('pepegram_wp');
-if (savedWp) {
-  if (savedWp.startsWith('custom:')) {
-    const color = savedWp.slice(7);
-    bgPicker.value = color;
-    chatMain.style.background = color;
-    document.querySelector('.wp-btn[data-wp="custom"]').classList.add('active');
-    document.querySelector('.wp-btn[data-wp="default"]').classList.remove('active');
-  } else if (savedWp !== 'default') {
-    const btn = document.querySelector(`.wp-btn[data-wp="${savedWp}"]`);
-    if (btn) btn.click();
-  }
-}
-
-
-// ── Rephrase (✨) ────────────────────────────────────────────────────
-const rephraseBtn        = document.getElementById('rephraseBtn');
-const rephrasePanel      = document.getElementById('rephrasePanel');
-const rephrasePanelClose = document.getElementById('rephrasePanelClose');
-const rephrasePreview    = document.getElementById('rephrasePreview');
-const rephraseActions    = document.getElementById('rephraseActions');
-const rephraseApplyBtn   = document.getElementById('rephraseApplyBtn');
-const rephraseRetryBtn   = document.getElementById('rephraseRetryBtn');
-
-let lastRephraseStyle  = null;
+const $ = (id) => document.getElementById(id);
+const authOverlay = $('authOverlay');
+const authUsernameInput = $('authUsernameInput') || $('authNickInput');
+const authEnterBtn = $('authEnterBtn');
+const authForm = authOverlay.querySelector('.auth-form');
+const authLabel = authForm.querySelector('label');
+if (authLabel) { authLabel.textContent = 'Логін'; authLabel.htmlFor = 'authUsernameInput'; }
+authUsernameInput.placeholder = 'Логін';
+const authPasswordInput = document.createElement('input');
+authPasswordInput.type = 'password'; authPasswordInput.placeholder = 'Пароль (мінімум 8 символів)'; authPasswordInput.minLength = 8; authPasswordInput.maxLength = 128; authPasswordInput.autocomplete = 'current-password';
+authForm.insertBefore(authPasswordInput, authEnterBtn);
+const authError = document.createElement('div'); authError.className = 'auth-error'; authForm.insertBefore(authError, authEnterBtn);
+const authModeBtn = document.createElement('button'); authModeBtn.type = 'button'; authModeBtn.className = 'auth-mode-btn'; authModeBtn.textContent = 'Створити акаунт'; authForm.appendChild(authModeBtn);
+let registrationMode = false;
+const logoutBtn = document.createElement('button');
+logoutBtn.type = 'button'; logoutBtn.className = 'logout-btn'; logoutBtn.textContent = 'Вийти з акаунта';
+document.querySelector('.sidebar-bottom')?.appendChild(logoutBtn);
+logoutBtn.addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); socket.disconnect(); window.location.reload(); });
+const app = $('app');
+const form = $('form');
+const input = $('input');
+const messagesList = $('messages');
+const messagesWrap = $('messagesWrap');
+const userList = $('userList');
+const typingStatus = $('typingStatus');
+const onlineCount = $('onlineCount');
+const myNickDisplay = $('myNickDisplay');
+const myAvatar = $('myAvatar');
+const changeNickBtn = $('changeNickBtn');
+const muteBtn = $('muteBtn');
+const emojiBtn = $('emojiBtn');
+const emojiPicker = $('emojiPicker');
+const bgPicker = $('bgPicker');
+const chatMain = document.querySelector('.chat-main');
+const hamburgerBtn = $('hamburgerBtn');
+const sidebarBackdrop = $('sidebarBackdrop');
+const sidebar = document.querySelector('.sidebar');
+const roomForm = document.getElementById('roomForm');
+const roomInput = document.getElementById('roomInput');
+const generalRoomBtn = document.getElementById('generalRoomBtn');
+const roomSubmitBtn = roomForm?.querySelector('button[type="submit"]');
+const roomPasswordInput = document.createElement('input');
+roomPasswordInput.type = 'password'; roomPasswordInput.maxLength = 128; roomPasswordInput.placeholder = 'пароль нової кімнати'; roomPasswordInput.autocomplete = 'new-password';
+roomForm?.insertBefore(roomPasswordInput, roomSubmitBtn);
+if (roomSubmitBtn) roomSubmitBtn.textContent = 'Створити';
+const roomListElement = document.createElement('ul'); roomListElement.className = 'room-list'; roomListElement.id = 'roomList';
+generalRoomBtn?.parentElement?.appendChild(roomListElement);
+const headerTitle = document.querySelector('.header-title');
+const aiRoomBtn = document.createElement('button');
+aiRoomBtn.type = 'button'; aiRoomBtn.className = 'ai-room-btn'; aiRoomBtn.textContent = '🤖 Qwen AI';
+generalRoomBtn?.parentElement?.insertBefore(aiRoomBtn, generalRoomBtn);
+aiRoomBtn.addEventListener('click', () => socket.emit('joinRoom', { name: 'ai' }));
+const rephraseBtn = $('rephraseBtn');
+const rephrasePanel = $('rephrasePanel');
+const rephrasePanelClose = $('rephrasePanelClose');
+const rephrasePreview = $('rephrasePreview');
+const rephraseActions = $('rephraseActions');
+const rephraseApplyBtn = $('rephraseApplyBtn');
+const rephraseRetryBtn = $('rephraseRetryBtn');
+const styleButtons = [...document.querySelectorAll('.rephrase-style-btn')];
+let lastRephraseStyle = null;
 let lastRephraseResult = '';
 
-/** Відкрити/закрити панель */
-rephraseBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const isOpen = rephrasePanel.classList.contains('open');
-  if (isOpen) {
-    closeRephrasePanel();
-  } else {
-    openRephrasePanel();
-  }
-});
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+function playSound(start, end, volume, duration) {
+  if (soundMuted || !AudioCtx) return;
+  audioCtx ||= new AudioCtx();
+  const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination); osc.type = 'sine';
+  osc.frequency.setValueAtTime(start, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(end, audioCtx.currentTime + duration * 0.7);
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.start(); osc.stop(audioCtx.currentTime + duration + 0.02);
+}
+const playSendSound = () => playSound(880, 440, 0.18, 0.18);
+const playReceiveSound = () => playSound(660, 880, 0.12, 0.15);
 
-rephrasePanelClose.addEventListener('click', closeRephrasePanel);
+function openSidebar() { sidebar.classList.add('open'); sidebarBackdrop.classList.add('visible'); document.body.style.overflow = 'hidden'; }
+function closeSidebar() { sidebar.classList.remove('open'); sidebarBackdrop.classList.remove('visible'); document.body.style.overflow = ''; }
+hamburgerBtn.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
+sidebarBackdrop.addEventListener('click', closeSidebar);
+function closeSidebarOnMobile() { if (window.innerWidth <= 768) closeSidebar(); }
 
-function openRephrasePanel() {
-  rephrasePanel.classList.add('open');
-  rephraseBtn.classList.add('active');
-  // Скидаємо стан якщо текст змінився
-  resetRephrasePreview();
+function updateIdentity() {
+  myNickDisplay.textContent = myNick;
+  myAvatar.textContent = myNick.charAt(0).toUpperCase();
 }
 
-function closeRephrasePanel() {
-  rephrasePanel.classList.remove('open');
-  rephraseBtn.classList.remove('active');
+function submitNick(value, { initial = false, onSuccess = () => {}, onError = () => {} } = {}) {
+  const candidate = String(value || '').trim().slice(0, 20);
+  if (!candidate) return onError('Нік не може бути порожнім');
+  socket.emit('setUsername', { nick: candidate }, (result) => {
+    if (!result || !result.ok) return onError(result?.error || 'Не вдалося встановити нік');
+    myNick = result.nick;
+    localStorage.setItem('pepegram_nick', myNick);
+    updateIdentity();
+    if (initial) { authOverlay.style.display = 'none'; app.style.display = 'flex'; }
+    onSuccess();
+  });
 }
 
-function resetRephrasePreview() {
-  rephrasePreview.className = 'rephrase-preview';
-  rephrasePreview.innerHTML = '<span class="rephrase-preview-placeholder">Введи текст у поле і натисни стиль ↓</span>';
-  rephraseActions.style.display = 'none';
-  lastRephraseResult = '';
-  lastRephraseStyle  = null;
-  document.querySelectorAll('.rephrase-style-btn').forEach(b => b.classList.remove('active'));
+function activateChat(username) {
+  myNick = username; localStorage.setItem('pepegram_nick', myNick); updateIdentity();
+  authOverlay.style.display = 'none'; app.style.display = 'flex';
 }
-
-/** Клік по стилю перефразування */
-document.querySelectorAll('.rephrase-style-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const style = btn.dataset.style;
-    const text  = input.value.trim();
-
-    if (!text) {
-      rephrasePreview.innerHTML = '<span class="rephrase-preview-placeholder">⚠️ Спочатку введи текст у поле вводу</span>';
+async function enterChat() {
+  authError.textContent = '';
+  const username = authUsernameInput.value.trim(); const password = authPasswordInput.value;
+  if (!username || !password) { authError.textContent = 'Вкажіть логін і пароль'; return; }
+  try {
+    const endpoint = registrationMode ? '/api/auth/register' : '/api/auth/login';
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Помилка авторизації');
+    window.location.reload();
+    return;
+    if (registrationMode) {
+      window.location.reload();
+      return;
+      /* The page reload establishes the new session before Socket.IO reconnects. */
+      registrationMode = false;
+      authEnterBtn.textContent = 'Увійти в чат →';
+      authModeBtn.textContent = 'Створити акаунт';
+      authPasswordInput.value = '';
+      authError.textContent = 'Акаунт створено. Тепер увійдіть із цим логіном і паролем.';
       return;
     }
-
-    // Позначаємо активний стиль
-    document.querySelectorAll('.rephrase-style-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    lastRephraseStyle = style;
-
-    // Стан завантаження
-    setRephraseLoading(true);
-
-    try {
-      const res = await fetch('/api/rephrase', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text, style })
+    socket.emit('authenticate', (result) => {
+      if (!result?.ok) { authError.textContent = result?.error || 'Сесія не підтверджена'; return; }
+      activateChat(username);
+      socket.emit('setUsername', { nick: username }, (nickResult) => {
+        if (!nickResult?.ok) { authError.textContent = nickResult?.error || 'Не вдалося підтвердити нік'; socket.disconnect(); }
       });
+    });
+  } catch (error) { authError.textContent = error.message; }
+}
+authEnterBtn.addEventListener('click', enterChat);
+authModeBtn.addEventListener('click', () => { registrationMode = !registrationMode; authEnterBtn.textContent = registrationMode ? 'Зареєструватися' : 'Увійти в чат →'; authModeBtn.textContent = registrationMode ? 'У мене вже є акаунт' : 'Створити акаунт'; authPasswordInput.autocomplete = registrationMode ? 'new-password' : 'current-password'; });
+authUsernameInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') enterChat(); });
+authPasswordInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') enterChat(); });
 
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Помилка сервера');
-      }
-
-      lastRephraseResult = data.result;
-      showRephraseResult(data.result);
-    } catch (err) {
-      setRephraseLoading(false);
-      rephrasePreview.classList.remove('loading');
-      rephrasePreview.innerHTML = `<span style="color:#e05252">❌ ${escapeHtml(err.message)}</span>`;
-      rephraseActions.style.display = 'none';
-    }
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = input.value.trim().slice(0, 500);
+  if (!text || !myNick) return;
+  socket.emit('chat message', { text });
+  playSendSound(); input.value = '';
+  if (isTyping) { isTyping = false; socket.emit('stopTyping'); }
+});
+roomForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const name = roomInput.value.trim();
+  if (!name) return;
+  socket.emit('createRoom', { name, password: roomPasswordInput.value }, (result) => {
+    if (result?.ok) { roomInput.value = ''; roomPasswordInput.value = ''; closeSidebarOnMobile(); }
+    else addSystemMessage(result?.error || 'Не вдалося створити кімнату');
   });
 });
+generalRoomBtn?.addEventListener('click', () => socket.emit('joinRoom', { name: 'general' }));
 
-function setRephraseLoading(on) {
-  if (on) {
-    rephrasePreview.className = 'rephrase-preview loading';
-    rephrasePreview.innerHTML = '<div class="rephrase-spinner"></div><span>Qwen думає...</span>';
-    rephraseActions.style.display = 'none';
-    // Блокуємо кнопки під час завантаження
-    document.querySelectorAll('.rephrase-style-btn').forEach(b => b.disabled = true);
-  } else {
-    rephrasePreview.className = 'rephrase-preview';
-    document.querySelectorAll('.rephrase-style-btn').forEach(b => b.disabled = false);
-  }
+input.addEventListener('input', () => {
+  if (!myNick) return;
+  if (!isTyping) { isTyping = true; socket.emit('userTyping'); }
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => { isTyping = false; socket.emit('stopTyping'); }, 1800);
+});
+
+socket.on('connect', async () => {
+  try {
+    const response = await fetch('/api/auth/me');
+    if (!response.ok) return;
+    const data = await response.json();
+    socket.emit('authenticate', (result) => {
+      if (result?.ok) {
+        activateChat(data.username);
+        socket.emit('setUsername', { nick: data.username }, (nickResult) => { if (!nickResult?.ok) socket.disconnect(); });
+      }
+    });
+  } catch { /* Сервер авторизації ще недоступний. */ }
+});
+socket.on('history', (items) => {
+  messagesList.replaceChildren();
+  if (Array.isArray(items)) items.forEach((item) => renderEvent(item, false));
+  scrollToBottom();
+});
+socket.on('roomState', (state = {}) => {
+  if (headerTitle && typeof state.name === 'string') headerTitle.textContent = state.name;
+  aiRoomBtn.classList.toggle('active', state.ai === true);
+  generalRoomBtn?.classList.toggle('active', state.name === 'general');
+});
+socket.on('roomList', (items) => {
+  roomListElement.replaceChildren();
+  if (!Array.isArray(items)) return;
+  items.filter((room) => room && typeof room.name === 'string' && room.name !== 'general').forEach((room) => {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'room-list-item';
+    button.textContent = `${room.protected ? '🔒 ' : ''}${room.title || room.name}${room.creator && room.creator !== 'system' ? ` · ${room.creator}` : ''}`;
+    button.title = room.protected ? 'Захищена паролем кімната' : 'Відкрита кімната';
+    button.addEventListener('click', () => {
+      const password = room.protected && !room.unlocked ? window.prompt(`Пароль кімнати «${room.title || room.name}»:`) : '';
+      if (room.protected && password === null) return;
+      socket.emit('joinRoom', { name: room.name, password }, (result) => { if (!result?.ok) addSystemMessage(result?.error || 'Не вдалося увійти в кімнату'); });
+    });
+    const item = document.createElement('li'); item.appendChild(button); roomListElement.appendChild(item);
+  });
+});
+socket.on('chat message', (item) => renderEvent(item, true));
+socket.on('system', (item) => addSystemMessage(typeof item === 'object' ? item.text : item));
+socket.on('onlineUsers', (items) => {
+  userList.replaceChildren();
+  const list = Array.isArray(items) ? items : [];
+  list.forEach((item) => {
+    const nick = typeof item === 'object' ? item.nick : item;
+    if (typeof nick !== 'string') return;
+    const li = document.createElement('li');
+    const avatar = document.createElement('span'); avatar.className = 'u-avatar'; avatar.textContent = nick.charAt(0).toUpperCase();
+    const name = document.createElement('span'); name.textContent = nick;
+    const dot = document.createElement('span'); dot.className = 'u-dot';
+    li.append(avatar, name, dot);
+    if (typeof item === 'object' && item.id && item.id !== socket.id) {
+      li.title = 'Відкрити приватний чат';
+      li.addEventListener('click', () => socket.emit('openPrivateChat', { socketId: item.id }));
+    }
+    userList.appendChild(li);
+  });
+  onlineCount.textContent = `${list.length} онлайн`;
+});
+socket.on('userTyping', (nick) => { if (typeof nick === 'string' && nick !== myNick) typingStatus.textContent = `${nick} друкує...`; });
+socket.on('stopTyping', () => { typingStatus.textContent = ''; });
+socket.on('ollamaStatus', ({ available } = {}) => setOllamaAvailability(Boolean(available)));
+
+function renderEvent(item, playSoundOnMessage) {
+  if (!item || typeof item !== 'object') return;
+  if (item.type === 'system') return addSystemMessage(item.text);
+  const text = typeof item.text === 'string' ? item.text : '';
+  const nick = typeof item.nick === 'string' ? item.nick : 'Невідомий';
+  const own = item.senderId === socket.id;
+  addMessage(text, nick, own ? 'outgoing' : 'incoming', item.createdAt);
+  if (playSoundOnMessage && !own) playReceiveSound();
+}
+function addMessage(text, nick, direction, createdAt) {
+  const li = document.createElement('li'); li.className = `msg-item ${direction}`;
+  const name = document.createElement('div'); name.className = 'msg-nick'; name.textContent = nick;
+  const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.textContent = text;
+  const time = document.createElement('div'); time.className = 'msg-time'; time.textContent = new Date(createdAt || Date.now()).toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
+  li.append(name, bubble, time); messagesList.appendChild(li); scrollToBottom();
+}
+function addSystemMessage(text) {
+  const li = document.createElement('li'); li.className = 'msg-item system';
+  const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.textContent = typeof text === 'string' ? text : '';
+  li.appendChild(bubble); messagesList.appendChild(li); scrollToBottom();
+}
+function scrollToBottom() { messagesWrap.scrollTop = messagesWrap.scrollHeight; }
+authUsernameInput
+changeNickBtn.addEventListener('click', showNickModal);
+function showNickModal() {
+  const overlay = document.createElement('div'); overlay.className = 'nick-modal-overlay';
+  const modal = document.createElement('div'); modal.className = 'nick-modal';
+  const title = document.createElement('h3'); title.textContent = '✏️ Змінити нікнейм';
+  const newInput = document.createElement('input'); newInput.type = 'text'; newInput.maxLength = 20; newInput.value = myNick; newInput.placeholder = 'Новий нік...';
+  const actions = document.createElement('div'); actions.className = 'nick-modal-actions';
+  const cancel = document.createElement('button'); cancel.className = 'btn-cancel'; cancel.textContent = 'Скасувати';
+  const save = document.createElement('button'); save.className = 'btn-save'; save.textContent = 'Зберегти';
+  const error = document.createElement('div'); error.className = 'nick-error';
+  actions.append(cancel, save); modal.append(title, newInput, error, actions); overlay.appendChild(modal); document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  const saveNick = () => submitNick(newInput.value, { onSuccess: close, onError: (message) => { error.textContent = message; } });
+  cancel.addEventListener('click', close); save.addEventListener('click', saveNick);
+  newInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') saveNick(); if (event.key === 'Escape') close(); });
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); }); newInput.focus(); newInput.select();
 }
 
-function showRephraseResult(text) {
-  setRephraseLoading(false);
-  rephrasePreview.textContent = text;
-  rephraseActions.style.display = 'flex';
+muteBtn.addEventListener('click', () => { soundMuted = !soundMuted; muteBtn.textContent = soundMuted ? '🔕' : '🔔'; });
+emojiBtn.addEventListener('click', (event) => { event.stopPropagation(); emojiPicker.classList.toggle('open'); });
+emojiPicker.querySelectorAll('span').forEach((span) => span.addEventListener('click', () => { input.value += span.textContent; input.focus(); emojiPicker.classList.remove('open'); }));
+document.addEventListener('click', () => emojiPicker.classList.remove('open'));
+
+const wpClasses = ['wp-gradient1', 'wp-gradient2', 'wp-gradient3', 'wp-dark'];
+document.querySelectorAll('.wp-btn').forEach((button) => button.addEventListener('click', (event) => {
+  if (button.dataset.wp === 'custom') return; event.stopPropagation();
+  document.querySelectorAll('.wp-btn').forEach((item) => item.classList.remove('active')); button.classList.add('active');
+  chatMain.classList.remove(...wpClasses, 'wp-custom'); chatMain.style.background = '';
+  if (button.dataset.wp !== 'default') chatMain.classList.add(`wp-${button.dataset.wp}`);
+  localStorage.setItem('pepegram_wp', button.dataset.wp); closeSidebarOnMobile();
+}));
+bgPicker.addEventListener('input', () => { chatMain.classList.remove(...wpClasses, 'wp-custom'); chatMain.style.background = bgPicker.value; document.querySelectorAll('.wp-btn').forEach((b) => b.classList.remove('active')); document.querySelector('.wp-btn[data-wp="custom"]').classList.add('active'); localStorage.setItem('pepegram_wp', `custom:${bgPicker.value}`); });
+
+function setOllamaAvailability(available) {
+  ollamaAvailable = available; rephraseBtn.disabled = !available; rephraseBtn.title = available ? 'Перефразувати' : 'Ollama недоступна';
+  styleButtons.forEach((button) => { button.disabled = !available; });
 }
+rephraseBtn.addEventListener('click', () => { if (ollamaAvailable) { rephrasePanel.classList.toggle('open'); rephraseBtn.classList.toggle('active'); if (rephrasePanel.classList.contains('open')) resetRephrasePreview(); } });
+rephrasePanelClose.addEventListener('click', () => { rephrasePanel.classList.remove('open'); rephraseBtn.classList.remove('active'); });
+function resetRephrasePreview() { rephrasePreview.className = 'rephrase-preview'; rephrasePreview.replaceChildren(); const placeholder = document.createElement('span'); placeholder.className = 'rephrase-preview-placeholder'; placeholder.textContent = 'Введи текст у поле і натисни стиль ↓'; rephrasePreview.appendChild(placeholder); rephraseActions.style.display = 'none'; lastRephraseResult = ''; lastRephraseStyle = null; styleButtons.forEach((b) => b.classList.remove('active')); }
+function setRephraseLoading(loading) { rephrasePreview.className = loading ? 'rephrase-preview loading' : 'rephrase-preview'; rephrasePreview.replaceChildren(); if (loading) { const spinner = document.createElement('div'); spinner.className = 'rephrase-spinner'; const label = document.createElement('span'); label.textContent = 'Qwen думає...'; rephrasePreview.append(spinner, label); } styleButtons.forEach((b) => { b.disabled = loading || !ollamaAvailable; }); rephraseActions.style.display = 'none'; }
+styleButtons.forEach((button) => button.addEventListener('click', async () => {
+  if (!ollamaAvailable) return;
+  const text = input.value.trim().slice(0, 500); if (!text) { rephrasePreview.textContent = '⚠️ Спочатку введи текст у поле вводу'; return; }
+  styleButtons.forEach((b) => b.classList.remove('active')); button.classList.add('active'); lastRephraseStyle = button.dataset.style; setRephraseLoading(true);
+  try { const response = await fetch('/api/rephrase', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, style: lastRephraseStyle }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Помилка сервера'); lastRephraseResult = data.result; setRephraseLoading(false); rephrasePreview.textContent = lastRephraseResult; rephraseActions.style.display = 'flex'; }
+  catch (error) { setRephraseLoading(false); rephrasePreview.textContent = `❌ ${error.message}`; }
+}));
+rephraseApplyBtn.addEventListener('click', () => { if (lastRephraseResult) { input.value = lastRephraseResult; input.focus(); rephrasePanel.classList.remove('open'); input.dispatchEvent(new Event('input')); } });
+rephraseRetryBtn.addEventListener('click', () => { const button = styleButtons.find((item) => item.dataset.style === lastRephraseStyle); if (button) button.click(); });
 
-/** Застосувати результат у поле вводу */
-rephraseApplyBtn.addEventListener('click', () => {
-  if (!lastRephraseResult) return;
-  input.value = lastRephraseResult;
-  input.focus();
-  closeRephrasePanel();
-  // Тригеримо typing indicator щоб оновити placeholder
-  input.dispatchEvent(new Event('input'));
-});
 
-/** Перегенерувати з тим же стилем */
-rephraseRetryBtn.addEventListener('click', () => {
-  if (!lastRephraseStyle) return;
-  const btn = document.querySelector(`.rephrase-style-btn[data-style="${lastRephraseStyle}"]`);
-  if (btn) btn.click();
-});
-
-/** Закрити панель при кліку поза нею */
-document.addEventListener('click', (e) => {
-  if (
-    rephrasePanel.classList.contains('open') &&
-    !rephrasePanel.contains(e.target) &&
-    e.target !== rephraseBtn
-  ) {
-    closeRephrasePanel();
-  }
-});
